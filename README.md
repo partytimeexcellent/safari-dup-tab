@@ -23,12 +23,13 @@ Homebrew builds the app from source on your Mac, so macOS doesn't show an "unide
 
 ### Option 2: Download the app
 
-1. Download `SafariDupTab.zip` from the [latest release](https://github.com/partytimeexcellent/safari-dup-tab/releases/latest), unzip it, and move **SafariDupTab.app** to your **Applications** folder.
-2. Open it. The app isn't signed by an identified Apple developer, so macOS will block it the first time:
+1. Download `SafariDupTab.dmg` from the [latest release](https://github.com/partytimeexcellent/safari-dup-tab/releases/latest) and open it.
+2. In the window that appears, **drag SafariDupTab onto the Applications folder**. Don't open it from the disk image; it needs to live in Applications. Then eject the disk image.
+3. Open SafariDupTab from your Applications folder. The app isn't signed by an identified Apple developer, so macOS will block it the first time:
    - Click **Done** (not Move to Trash) in the warning.
    - Go to System Settings → Privacy & Security, scroll down to the message about SafariDupTab, and click **Open Anyway**.
    - Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/SafariDupTab.app`, then open it.
-3. Once it's running, it adds itself to Login Items so it starts at login.
+4. Once it's running, it adds itself to Login Items so it starts at login.
 
 Use one option, not both. If both are installed, only one copy runs.
 
@@ -81,7 +82,8 @@ Logs (Homebrew): `$(brew --prefix)/var/log/safari-dup-tab.log`
 ## Build it yourself
 
 ```bash
-./build.sh   # produces build/SafariDupTab.app (universal)
+./build.sh      # produces build/SafariDupTab.app (universal)
+./make-dmg.sh   # packages it as build/SafariDupTab.dmg
 ```
 
 ## License
