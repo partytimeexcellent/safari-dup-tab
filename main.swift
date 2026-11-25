@@ -8,25 +8,76 @@
 //     permission every second and removes the tap and quits the moment it is gone.
 //  3. If macOS disables the tap for being slow, we only re-enable it a few times;
 //     after that we quit rather than risk stalling input.
+//
+// Two ways to run:
+//  - Homebrew service (launchd, KeepAlive): the formula sets SAFARIDUPTAB_LAUNCHD=1.
+//  - Standalone app (downloaded .app, opened by the user, then a login item).
 import Cocoa
 import ApplicationServices
+import ServiceManagement
 
 let safariID = "com.apple.Safari"
-let kVK_T: Int64 = 17
+let underLaunchd = ProcessInfo.processInfo.environment["SAFARIDUPTAB_LAUNCHD"] == "1"
+
+// Helper mode: a fresh process reports whether the permission is granted. Used because a
+// long-running process may not notice a newly granted permission.
+if CommandLine.arguments.contains("--check-trust") { exit(AXIsProcessTrusted() ? 0 : 1) }
+
+// ---- Single instance (e.g. Homebrew service and a downloaded copy both installed) ----
+let lockPath = NSTemporaryDirectory() + "safari-dup-tab.lock"
+let lockFD = open(lockPath, O_CREAT | O_RDWR, 0o600)
+if lockFD < 0 || flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
+    NSLog("SafariDupTab: another copy is already running; exiting")
+    if underLaunchd { Thread.sleep(forTimeInterval: 30) } // don't let launchd spin
+    exit(0)
+}
 
 // ---- Permission check before doing anything ----
-// A running process may not see a newly granted permission, so if we don't have it,
-// prompt once and exit; launchd (KeepAlive) relaunches us and a fresh launch sees the grant.
+func freshProcessIsTrusted() -> Bool {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+    p.arguments = ["--check-trust"]
+    guard (try? p.run()) != nil else { return false }
+    p.waitUntilExit()
+    return p.terminationStatus == 0
+}
+
+func promptForPermission() {
+    let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    _ = AXIsProcessTrustedWithOptions(opts)
+}
+
 if !AXIsProcessTrusted() {
-    let defaults = UserDefaults.standard
-    if !defaults.bool(forKey: "prompted") {
-        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(opts)
-        defaults.set(true, forKey: "prompted")
-    }
     NSLog("SafariDupTab: no Accessibility permission yet (Privacy & Security → Device Control and Data Access); will retry")
-    Thread.sleep(forTimeInterval: 5)
-    exit(0)
+    if underLaunchd {
+        // Prompt once, then exit; launchd relaunches us and a fresh launch sees the grant.
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "prompted") { promptForPermission(); defaults.set(true, forKey: "prompted") }
+        Thread.sleep(forTimeInterval: 5)
+        exit(0)
+    }
+    // Standalone: prompt, then wait until the permission is granted.
+    promptForPermission()
+    while true {
+        Thread.sleep(forTimeInterval: 3)
+        if AXIsProcessTrusted() { break }          // this process sees it: carry on
+        if freshProcessIsTrusted() {               // only a fresh process sees it: relaunch
+            let sh = Process()
+            sh.executableURL = URL(fileURLWithPath: "/bin/sh")
+            sh.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$0\"", Bundle.main.bundlePath]
+            try? sh.run()
+            exit(0)
+        }
+    }
+}
+
+// Standalone: start at login from now on (once; the user can turn it off in Login Items).
+if !underLaunchd, #available(macOS 13.0, *) {
+    let defaults = UserDefaults.standard
+    if !defaults.bool(forKey: "loginItemRegistered") {
+        do { try SMAppService.mainApp.register(); defaults.set(true, forKey: "loginItemRegistered") }
+        catch { NSLog("SafariDupTab: could not add login item: \(error)") }
+    }
 }
 
 // ---- Duplicating the tab (off the main thread) ----
@@ -92,13 +143,16 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
         return Unmanaged.passUnretained(event)
     }
     guard type == .keyDown,
-          event.getIntegerValueField(.keyboardEventKeycode) == kVK_T,
           event.getIntegerValueField(.keyboardEventAutorepeat) == 0
     else { return Unmanaged.passUnretained(event) }
 
     // Exactly ⌘ — no Shift/Option/Control (so ⌘⇧T "reopen closed tab" still works).
     let mods = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
-    guard mods == .maskCommand,
+    guard mods == .maskCommand else { return Unmanaged.passUnretained(event) }
+
+    // Match the letter the current keyboard layout types with ⌘ held (works for Dvorak,
+    // AZERTY, "Dvorak – QWERTY ⌘", etc.), not a fixed physical key.
+    guard NSEvent(cgEvent: event)?.characters?.lowercased() == "t",
           NSWorkspace.shared.frontmostApplication?.bundleIdentifier == safariID
     else { return Unmanaged.passUnretained(event) }
 
