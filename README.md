@@ -10,6 +10,10 @@ It's a tiny background app with no window, no Dock icon and no menu bar icon. It
 - Safari only. Safari Technology Preview is ignored.
 - Any keyboard layout. It matches the letter T as your layout types it with ⌘, so Dvorak, AZERTY and similar layouts work too.
 
+## ⚠️ Before removing the permission
+
+**Stop SafariDupTab before you remove or switch off its permission** (`brew services stop safari-dup-tab`, or quit it in Activity Monitor). Versions 1.0.0–1.0.2 can freeze keyboard and mouse input system-wide if the permission is removed while they are running. If that happens, force-quit SafariDupTab from another computer over SSH, or restart your Mac.
+
 ## Install
 
 ### Option 1: Homebrew (recommended)
