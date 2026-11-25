@@ -10,10 +10,6 @@ It's a tiny background app with no window, no Dock icon and no menu bar icon. It
 - Safari only. Safari Technology Preview is ignored.
 - Any keyboard layout. It matches the letter T as your layout types it with ⌘, so Dvorak, AZERTY and similar layouts work too.
 
-## ⚠️ Upgrade from 1.0.0–1.0.2
-
-Versions 1.0.0–1.0.2 can freeze keyboard and mouse input system-wide if the permission is removed while they are running. If you have one of them, stop it before removing the permission (`brew services stop safari-dup-tab`, or quit it in Activity Monitor), then upgrade. In 1.0.3 and later, removing the permission causes a few seconds of keyboard lag at most, then the app quits.
-
 ## Install
 
 ### Option 1: Homebrew (recommended)
