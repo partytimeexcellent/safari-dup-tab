@@ -51,10 +51,30 @@ Homebrew doesn't remove the downloaded app, and `--force` doesn't either. Remove
    - Homebrew: `/opt/homebrew/opt/safari-dup-tab/SafariDupTab.app` (Intel: `/usr/local/opt/...`)
    - Download: `/Applications/SafariDupTab.app`
 
+   Searching in that file picker won't find the Homebrew copy, because Homebrew's folder is hidden and isn't indexed by Spotlight. Use ⌘⇧G and paste the path instead.
+
    The app notices the permission within about 10 seconds.
 2. **Automation:** the first time you press ⌘T in Safari, macOS asks whether SafariDupTab can control Safari. Click **Allow**.
 
-> After an upgrade, macOS sees a new app, so the permission has to be granted again. Stop SafariDupTab first (`brew services stop safari-dup-tab`), remove it from that list, then start it again: it asks for permission and reappears in the list, ready to switch on.
+### After an upgrade
+
+macOS sees each new version as a new app, so the permission has to be granted again. After `brew upgrade`, SafariDupTab asks for permission and appears in the list switched off. Switch it on, and it starts working within about 10 seconds.
+
+### Resetting the permission
+
+If ⌘T stops working after an upgrade, or the **–** button is grayed out so you can't remove the old entry, reset SafariDupTab's permission from Terminal:
+
+```bash
+brew services stop safari-dup-tab
+tccutil reset Accessibility io.github.partytimeexcellent.safari-dup-tab
+brew services start safari-dup-tab
+```
+
+The first line stops the app, so nothing is intercepting keys while the permission changes. The second clears SafariDupTab's entry. The third starts it again: it asks for permission and reappears in the list. Switch it on.
+
+For the downloaded app, quit SafariDupTab in Activity Monitor instead of the first line, and open it from Applications instead of the last.
+
+If you're still stuck, check the log: `tail -5 $(brew --prefix)/var/log/safari-dup-tab.log`
 
 ## Uninstall
 
