@@ -35,6 +35,8 @@ Then remove SafariDupTab from Device Control and Data Access, and from Privacy &
 - It then tells Safari, through AppleScript, to open a tab with the same URL right after the current one, and switches to it.
 - If no Safari window is open, ⌘T opens a new window. On a blank tab, it opens another blank tab next to it.
 
+**Safety:** if its permission is switched off or removed while it is running, it releases the keyboard and quits within a second. Version 1.0.0 could freeze keyboard input system-wide in that case, so please upgrade.
+
 **Limitation:** the new tab loads the same URL fresh. It doesn't copy the original tab's back/forward history or scroll position, unlike right-click → Duplicate Tab.
 
 Logs: `$(brew --prefix)/var/log/safari-dup-tab.log`
