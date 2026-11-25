@@ -32,6 +32,16 @@ Homebrew builds the app from source on your Mac, so macOS doesn't show an "unide
 
 Use one option, not both. If both are installed, only one copy runs.
 
+### Switching from the download to Homebrew
+
+Homebrew doesn't remove the downloaded app, and `--force` doesn't either. Remove it yourself first:
+
+1. Turn SafariDupTab off in System Settings → General → Login Items & Extensions.
+2. Quit SafariDupTab in Activity Monitor.
+3. Remove SafariDupTab from Privacy & Security → Device Control and Data Access.
+4. Drag `/Applications/SafariDupTab.app` to the Trash.
+5. Install with Homebrew (Option 1), then grant the permission again for the Homebrew copy.
+
 ## Permissions (one time)
 
 1. **Accessibility:** go to System Settings → Privacy & Security → **Device Control and Data Access** (called **Accessibility** on macOS 26 and earlier) and turn on **SafariDupTab**. If it isn't listed, click **+**, press ⌘⇧G and enter the app's location:
