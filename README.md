@@ -10,9 +10,9 @@ It's a tiny background app with no window, no Dock icon and no menu bar icon. It
 - Safari only. Safari Technology Preview is ignored.
 - Any keyboard layout. It matches the letter T as your layout types it with ⌘, so Dvorak, AZERTY and similar layouts work too.
 
-## ⚠️ Before removing the permission
+## ⚠️ Upgrade from 1.0.0–1.0.2
 
-**Stop SafariDupTab before you remove or switch off its permission** (`brew services stop safari-dup-tab`, or quit it in Activity Monitor). Versions 1.0.0–1.0.2 can freeze keyboard and mouse input system-wide if the permission is removed while they are running. If that happens, force-quit SafariDupTab from another computer over SSH, or restart your Mac.
+Versions 1.0.0–1.0.2 can freeze keyboard and mouse input system-wide if the permission is removed while they are running. If you have one of them, stop it before removing the permission (`brew services stop safari-dup-tab`, or quit it in Activity Monitor), then upgrade. In 1.0.3 and later, removing the permission causes a few seconds of keyboard lag at most, then the app quits.
 
 ## Install
 
@@ -66,7 +66,7 @@ Either way, you can then remove SafariDupTab from Device Control and Data Access
 - It then tells Safari, through AppleScript, to open a tab with the same URL right after the current one, and switches to it.
 - If no Safari window is open, ⌘T opens a new window. On a blank tab, it opens another blank tab next to it.
 
-**Safety:** if its permission is switched off or removed while it is running, it releases the keyboard and quits within a second. Version 1.0.0 could freeze keyboard input system-wide in that case, so please upgrade.
+**Safety:** the app quits if its permission is removed or switched off, if key presses stop reaching it, or if a permission check hangs. Typing may lag for a few seconds while it notices. Key handling runs on its own thread and never waits on anything else.
 
 **Limitation:** the new tab loads the same URL fresh. It doesn't copy the original tab's back/forward history or scroll position, unlike right-click → Duplicate Tab.
 
