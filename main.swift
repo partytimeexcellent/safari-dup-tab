@@ -67,9 +67,13 @@ if !AXIsProcessTrusted() {
     log("no Accessibility permission yet (Privacy & Security → Device Control and Data Access); will retry")
     let promptOpts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     if underLaunchd {
-        // Prompt once, then exit; launchd relaunches us and a fresh launch sees the grant.
+        // Prompt once per version (each new build needs the permission again, and prompting
+        // is what adds us to the list in System Settings), then exit; launchd relaunches us
+        // and a fresh launch sees the grant.
         let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: "prompted") { _ = AXIsProcessTrustedWithOptions(promptOpts); defaults.set(true, forKey: "prompted") }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let key = "prompted-\(version)"
+        if !defaults.bool(forKey: key) { _ = AXIsProcessTrustedWithOptions(promptOpts); defaults.set(true, forKey: key) }
         Thread.sleep(forTimeInterval: 5)
         exit(0)
     }

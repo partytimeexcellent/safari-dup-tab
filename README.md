@@ -54,7 +54,7 @@ Homebrew doesn't remove the downloaded app, and `--force` doesn't either. Remove
    The app notices the permission within about 10 seconds.
 2. **Automation:** the first time you press ⌘T in Safari, macOS asks whether SafariDupTab can control Safari. Click **Allow**.
 
-> After an upgrade, macOS sees a new app, so you may need to remove SafariDupTab from that list and add it again.
+> After an upgrade, macOS sees a new app, so the permission has to be granted again. Stop SafariDupTab first (`brew services stop safari-dup-tab`), remove it from that list, then start it again: it asks for permission and reappears in the list, ready to switch on.
 
 ## Uninstall
 
