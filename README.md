@@ -1,6 +1,8 @@
+<img src="assets/icon.png" width="128" alt="SafariDupTab icon">
+
 # SafariDupTab
 
-Makes **⌘T in Safari duplicate the current tab**, opening the copy right next to it instead of a blank tab at the end.
+Makes **⌘T in Safari duplicate the current tab** using Safari's own Duplicate Tab, so the copy opens right next to it and keeps its back/forward history.
 
 It's a tiny background app with no window, no Dock icon and no menu bar icon. It uses about 20 MB of memory and no CPU when idle. It only acts when Safari is the front app and you press exactly ⌘T. Every other app and shortcut is left alone, including ⌘⇧T (reopen closed tab).
 
@@ -70,12 +72,11 @@ Either way, you can then remove SafariDupTab from Device Control and Data Access
 ## How it works
 
 - A keyboard event tap watches for ⌘T while Safari is in front, and blocks Safari's usual New Tab.
-- It then tells Safari, through AppleScript, to open a tab with the same URL right after the current one, and switches to it.
-- If no Safari window is open, ⌘T opens a new window. On a blank tab, it opens another blank tab next to it.
+- It then runs Safari's own **Duplicate Tab**, which keeps the tab's back/forward history. Safari has this as a hidden item in its Window menu (it never appears on screen, which is also why a System Settings keyboard shortcut can't reach it). SafariDupTab presses it through Accessibility, so no menu is shown.
+- If a future Safari removes that hidden item, it opens the tab's right-click menu and chooses Duplicate Tab instead (you may see the menu flash briefly).
+- If that fails too, it falls back to opening the same URL in a new tab next to the current one (without history). If no Safari window is open, ⌘T opens a new window.
 
 **Safety:** the app quits if its permission is removed or switched off, if key presses stop reaching it, or if a permission check hangs. Typing may lag for a few seconds while it notices. Key handling runs on its own thread and never waits on anything else.
-
-**Limitation:** the new tab loads the same URL fresh. It doesn't copy the original tab's back/forward history or scroll position, unlike right-click → Duplicate Tab.
 
 Logs (Homebrew): `$(brew --prefix)/var/log/safari-dup-tab.log`
 

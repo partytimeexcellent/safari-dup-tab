@@ -156,12 +156,168 @@ func duplicateTab() {
     guard !scriptBusy else { return } // drop extra presses while Safari is still working
     scriptBusy = true
     scriptQueue.async {
-        if duplicateScript == nil { duplicateScript = NSAppleScript(source: scriptSource) }
-        var err: NSDictionary?
-        duplicateScript?.executeAndReturnError(&err)
-        if let err = err { log("AppleScript error: \(err)") }
+        if !duplicateViaContextMenu() {
+            // Fallback: new tab with the same URL (no back/forward history).
+            if duplicateScript == nil { duplicateScript = NSAppleScript(source: scriptSource) }
+            var err: NSDictionary?
+            duplicateScript?.executeAndReturnError(&err)
+            if let err = err { log("AppleScript error: \(err)") }
+        }
         DispatchQueue.main.async { scriptBusy = false }
     }
+}
+
+// ---- Safari's own "Duplicate Tab" (keeps back/forward history) via Accessibility ----
+// Safari only offers Duplicate Tab in a tab's right-click menu, so we find the selected tab
+// in the tab bar, open its menu, and press the item. Runs on scriptQueue, never the tap thread.
+
+/// "Duplicate Tab" in the user's language, read from Safari's own strings.
+let duplicateTitles: Set<String> = {
+    var titles: Set<String> = ["Duplicate Tab"]
+    for path in ["/System/Library/PrivateFrameworks/Safari.framework",
+                 "/System/Volumes/Preboot/Cryptexes/App/System/Library/PrivateFrameworks/Safari.framework"] {
+        guard let b = Bundle(path: path) else { continue }
+        for key in ["Duplicate Tab (menu item)", "Duplicate Tab"] {
+            let s = b.localizedString(forKey: key, value: nil, table: nil)
+            if s != key || key == "Duplicate Tab" { titles.insert(s) }
+        }
+    }
+    return titles
+}()
+
+func ax(_ e: AXUIElement, _ attr: String) -> CFTypeRef? {
+    var v: CFTypeRef?
+    return AXUIElementCopyAttributeValue(e, attr as CFString, &v) == .success ? v : nil
+}
+func axString(_ e: AXUIElement, _ attr: String) -> String? { ax(e, attr) as? String }
+func axChildren(_ e: AXUIElement) -> [AXUIElement] { (ax(e, kAXChildrenAttribute) as? [AXUIElement]) ?? [] }
+func axIsOn(_ e: AXUIElement) -> Bool {
+    if let n = ax(e, kAXValueAttribute) as? NSNumber { return n.intValue == 1 }
+    if let b = ax(e, kAXSelectedAttribute) as? NSNumber { return b.boolValue }
+    return false
+}
+func describe(_ e: AXUIElement) -> String {
+    let parts = [axString(e, kAXRoleAttribute), axString(e, kAXSubroleAttribute),
+                 axString(e, kAXTitleAttribute).map { "title=\"\($0.prefix(40))\"" },
+                 axString(e, kAXDescriptionAttribute).map { "desc=\"\($0.prefix(40))\"" },
+                 (ax(e, kAXValueAttribute) as? NSNumber).map { "value=\($0)" }]
+    return parts.compactMap { $0 }.joined(separator: " ")
+}
+
+/// Breadth-first search of the window (skipping web page content) for the selected tab.
+func findSelectedTab(in window: AXUIElement) -> AXUIElement? {
+    var queue: [(AXUIElement, Int, Bool)] = [(window, 0, false)] // element, depth, inside a tab group
+    var visited = 0
+    var dump: [String] = []
+    while !queue.isEmpty && visited < 3000 {
+        let (e, depth, inTabs) = queue.removeFirst()
+        visited += 1
+        let role = axString(e, kAXRoleAttribute) ?? ""
+        if debug && depth <= 7 { dump.append(String(repeating: "  ", count: depth) + describe(e)) }
+        if role == "AXWebArea" { continue } // never crawl the web page itself
+        // Safari 26+: tabs are AXRadioButton/AXTabButton inside an "AXOpaqueProviderList" tab bar.
+        // Older layouts: radio buttons inside an AXTabGroup.
+        let isTabButton = axString(e, kAXSubroleAttribute) == "AXTabButton"
+        if (isTabButton || (inTabs && (role == kAXRadioButtonRole as String || role == "AXTab"))) && axIsOn(e) {
+            if debug { log("found selected tab: \(describe(e))") }
+            return e
+        }
+        let nowInTabs = inTabs || role == kAXTabGroupRole as String
+            || axString(e, kAXSubroleAttribute) == "AXOpaqueProviderList"
+        for c in axChildren(e) { queue.append((c, depth + 1, nowInTabs)) }
+    }
+    if debug { log("no selected tab found (visited \(visited)). Window tree:\n" + dump.joined(separator: "\n")) }
+    return nil
+}
+
+/// Searches Safari's whole menu bar, including hidden/alternate items, for "Duplicate Tab".
+func findMenuBarItem(app: AXUIElement) -> AXUIElement? {
+    guard let mb = ax(app, kAXMenuBarAttribute) else { if debug { log("no menu bar") }; return nil }
+    var queue: [(AXUIElement, String)] = [(mb as! AXUIElement, "")]
+    var visited = 0
+    var seen: [String] = []
+    while !queue.isEmpty && visited < 3000 {
+        let (e, path) = queue.removeFirst()
+        visited += 1
+        let title = axString(e, kAXTitleAttribute) ?? ""
+        let here = title.isEmpty ? path : (path.isEmpty ? title : "\(path) > \(title)")
+        if title.localizedCaseInsensitiveContains("duplicate") { seen.append(here) }
+        if axString(e, kAXRoleAttribute) == kAXMenuItemRole as String, duplicateTitles.contains(title) {
+            let enabled = (ax(e, kAXEnabledAttribute) as? NSNumber)?.boolValue ?? false
+            if debug { log("menu bar item found: \(here) enabled=\(enabled)") }
+            if enabled { return e }
+        }
+        for c in axChildren(e) { queue.append((c, here)) }
+    }
+    if debug { log("menu bar search (visited \(visited)); items mentioning duplicate: \(seen.isEmpty ? "none" : seen.joined(separator: " | "))") }
+    return nil
+}
+
+func findMenu(near tab: AXUIElement, app: AXUIElement) -> AXUIElement? {
+    var candidates = axChildren(tab) + axChildren(app)
+    if let w = ax(app, kAXFocusedWindowAttribute) { candidates += axChildren(w as! AXUIElement) }
+    return candidates.first { axString($0, kAXRoleAttribute) == kAXMenuRole as String }
+}
+
+func duplicateViaContextMenu() -> Bool {
+    guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: safariID).first?.processIdentifier
+    else { return false }
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 1.0)
+    guard let w = ax(app, kAXFocusedWindowAttribute) else { if debug { log("no focused Safari window") }; return false }
+    let window = w as! AXUIElement
+
+    // Best case: a (possibly hidden) "Duplicate Tab" item in Safari's menu bar. Pressing it
+    // through Accessibility doesn't draw any menu.
+    if let item = findMenuBarItem(app: app) {
+        let r = AXUIElementPerformAction(item, kAXPressAction as CFString)
+        if debug { log("pressed menu bar Duplicate Tab: \(r.rawValue)") }
+        if r == .success { return true }
+    }
+
+    guard let tab = findSelectedTab(in: window) else { return false }
+    AXUIElementSetMessagingTimeout(tab, 0.5)
+
+    // Best case: the tab offers "Duplicate Tab" as an accessibility action (no menu shown).
+    var names: CFArray?
+    if AXUIElementCopyActionNames(tab, &names) == .success, let names = names as? [String] {
+        if debug {
+            let described = names.map { n -> String in
+                var d: CFString?
+                AXUIElementCopyActionDescription(tab, n as CFString, &d)
+                return "\(n.replacingOccurrences(of: "\n", with: " / ")) (\((d as String?) ?? ""))"
+            }
+            log("tab actions: " + described.joined(separator: " ; "))
+        }
+        if let action = names.first(where: { n in duplicateTitles.contains { n.contains($0) } }) {
+            let r = AXUIElementPerformAction(tab, action as CFString)
+            if debug { log("performed tab action directly: \(r.rawValue)") }
+            if r == .success { return true }
+        }
+    }
+
+    // Otherwise open the tab's right-click menu and press the item.
+    // Opening a menu can block until the menu closes; the short timeout lets us carry on.
+    let showResult = AXUIElementPerformAction(tab, kAXShowMenuAction as CFString)
+    if debug { log("show menu result: \(showResult.rawValue)") }
+
+    var menu: AXUIElement?
+    for _ in 0..<10 {
+        if let m = findMenu(near: tab, app: app) { menu = m; break }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    guard let menu = menu else { if debug { log("context menu not found") }; return false }
+
+    let items = axChildren(menu)
+    if let item = items.first(where: { duplicateTitles.contains(axString($0, kAXTitleAttribute) ?? "") }) {
+        let r = AXUIElementPerformAction(item, kAXPressAction as CFString)
+        if debug { log("pressed Duplicate Tab: \(r.rawValue)") }
+        if r == .success { return true }
+    } else if debug {
+        log("Duplicate Tab not in menu. Items: " + items.compactMap { axString($0, kAXTitleAttribute) }.joined(separator: " | "))
+    }
+    AXUIElementPerformAction(menu, kAXCancelAction as CFString) // close the menu before falling back
+    return false
 }
 
 // ---- Event tap (own thread; callback is pure computation) ----

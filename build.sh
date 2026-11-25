@@ -12,5 +12,7 @@ swiftc -O -target x86_64-apple-macos13 main.swift -o build/SafariDupTab-x86_64
 lipo -create build/SafariDupTab-arm64 build/SafariDupTab-x86_64 -output "$BIN"
 rm build/SafariDupTab-arm64 build/SafariDupTab-x86_64
 cp Info.plist "$APP/Contents/Info.plist"
+mkdir -p "$APP/Contents/Resources"
+cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - --identifier io.github.partytimeexcellent.safari-dup-tab "$APP"
 echo "Built $APP"
